@@ -245,13 +245,14 @@ connectToDatabase().then((connectedClient) => {
             res.status(500).json({ message: 'Error deleting messages' });
         }
     });
-});
+
 
 app.post('/fitness', async (req, res) => {
-    const { userId, datetime, fitness_entry } = req.body;
+    const { userId, title, fitness_entry } = req.body;
+    const datetime = new Date();
     try {
         const fitnessCollection = connectedClient.db('fitness_app').collection("fitness");
-        const result = await fitnessCollection.insertOne({ userId, datetime, fitness_entry });
+        const result = await fitnessCollection.insertOne({ userId, title, datetime:datetime, fitness_entry });
         res.status(201).json({ message: 'Journal entry created', entryId: result.insertedId });
     } catch (error) {
         console.error("Error creating fitness entry:", error);
@@ -262,10 +263,11 @@ app.post('/fitness', async (req, res) => {
 
 app.put('/fitness/:entryId', async (req, res) => {
     const { entryId } = req.params;
-    const { userId, datetime, fitness_entry } = req.body;
+    const datetime = new Date();
+    const { userId, title, fitness_entry } = req.body;
     try {
         const fitnessCollection = connectedClient.db('fitness_app').collection("fitness");
-        const result = await fitnessCollection.updateOne({ _id: new ObjectId(entryId) }, { $set: { userId, datetime, fitness_entry } });
+        const result = await fitnessCollection.updateOne({ _id: new ObjectId(entryId) }, { $set: { userId, title, fitness_entry, datetime: datetime } });
         if (result.matchedCount === 0) {
             return res.status(404).json({ message: 'Journal entry not found' });
         }
@@ -303,6 +305,8 @@ app.delete('/fitness/:entryId', async (req, res) => {
         console.error("Error deleting fitness entry:", error);
         res.status(500).json({ message: 'Error deleting fitness entry' });
     }
+});
+
 });
 
 

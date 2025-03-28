@@ -1,6 +1,6 @@
 import express from 'express';
 import { generate } from 'randomstring';
-import { MongoClient, ServerApiVersion } from 'mongodb';
+import { MongoClient, ServerApiVersion, ObjectId } from 'mongodb';
 import * as dotenv from 'dotenv';
 import nodemailer from 'nodemailer';
 import cors from 'cors';
@@ -61,13 +61,13 @@ connectToDatabase().then((connectedClient) => {
     app.post('/forgot-password', async (req, res) => {
         const { email } = req.body;
         try {
-            const usersCollection = connectedClient.db('fitness_app').collection("users");
+            const usersCollection = connectedClient.db('fitness_planner_app').collection("users");
             const user = await usersCollection.findOne({ email });
             if (!user) {
                 return res.status(404).json({ message: 'User not found' });
             }
             const otp = generate({ length: 6, charset: 'numeric' });
-            const passwordResetSessions = connectedClient.db('fitness_app').collection("password-reset-sessions");
+            const passwordResetSessions = connectedClient.db('fitness_planner_app').collection("password-reset-sessions");
             await passwordResetSessions.insertOne({ email, otp, createdAt: new Date() });
 
 
@@ -101,7 +101,7 @@ connectToDatabase().then((connectedClient) => {
     app.post('/verify-otp', async (req, res) => {
         const { email, otp } = req.body;
         try {
-            const passwordResetSessions = connectedClient.db('fitness_app').collection("password-reset-sessions");
+            const passwordResetSessions = connectedClient.db('fitness_planner_app').collection("password-reset-sessions");
             const session = await passwordResetSessions.findOne({ email, otp, createdAt: { $gte: new Date(Date.now() - 2 * 60 * 1000) } }); // Check if OTP is within 2 minutes
             if (!session) {
                 return res.status(400).json({ message: 'Invalid or expired OTP' });
@@ -116,7 +116,7 @@ connectToDatabase().then((connectedClient) => {
     app.post('/reset-password', async (req, res) => {
         const { email, newPassword } = req.body;
         try {
-            const usersCollection = connectedClient.db('fitness_app').collection("users");
+            const usersCollection = connectedClient.db('fitness_planner_app').collection("users");
             await usersCollection.updateOne({ email }, { $set: { password: newPassword } });
             res.status(200).json({ message: 'Password reset successfully' });
         } catch (error) {
@@ -127,7 +127,7 @@ connectToDatabase().then((connectedClient) => {
     app.post('/login', async (req, res) => {
         const { email, password } = req.body;
         try {
-            const usersCollection = connectedClient.db('fitness_app').collection("users");
+            const usersCollection = connectedClient.db('fitness_planner_app').collection("users");
             const user = await usersCollection.findOne({ email });
             if (!user || user.password !== password) {
                 return res.status(401).json({ message: 'Invalid email or password' });
@@ -145,7 +145,7 @@ connectToDatabase().then((connectedClient) => {
         const { name, email, password } = req.body;
 
         try {
-            const usersCollection = connectedClient.db('fitness_app').collection("users");
+            const usersCollection = connectedClient.db('fitness_planner_app').collection("users");
             const existingUser = await usersCollection.findOne({ email });
             if (existingUser) {
                 return res.status(409).json({ message: 'User with this email already exists' });
@@ -163,7 +163,7 @@ connectToDatabase().then((connectedClient) => {
     app.post('/chat', async (req, res) => {
         const { chatSessionId, chatName, userId, message, role } = req.body;
         try {
-            const chatsCollection = connectedClient.db('fitness_app').collection("chats");
+            const chatsCollection = connectedClient.db('fitness_planner_app').collection("chats");
             const result = await chatsCollection.insertOne({ chatSessionId, chatName, userId, message, role, createdAt: new Date() });
             res.status(201).json({ message: 'Message created', messageId: result.insertedId });
         } catch (error) {
@@ -176,7 +176,7 @@ connectToDatabase().then((connectedClient) => {
     app.get('/chats/:userId', async (req, res) => {
         const { userId } = req.params;
         try {
-            const chatsCollection = connectedClient.db('fitness_app').collection("chats");
+            const chatsCollection = connectedClient.db('fitness_planner_app').collection("chats");
             const chats = await chatsCollection.aggregate([
                 { $match: { userId: userId } },
                 { $sort: { createdAt: -1 } }, // Sort by the timestamp of the last message in descending order
@@ -201,7 +201,7 @@ connectToDatabase().then((connectedClient) => {
     app.get('/chat/:chatSessionId', async (req, res) => {
         const { chatSessionId } = req.params;
         try {
-            const chatsCollection = connectedClient.db('fitness_app').collection("chats");
+            const chatsCollection = connectedClient.db('fitness_planner_app').collection("chats");
             const messages = await chatsCollection.find({ chatSessionId }).toArray();
             res.status(200).json(messages);
         } catch (error) {
@@ -215,7 +215,7 @@ connectToDatabase().then((connectedClient) => {
         const { chatSessionId } = req.params;
         const { newChatName } = req.body;
         try {
-            const chatsCollection = connectedClient.db('fitness_app').collection("chats");
+            const chatsCollection = connectedClient.db('fitness_planner_app').collection("chats");
             const result = await chatsCollection.updateMany({ chatSessionId }, { $set: { chatName: newChatName } });
             res.status(200).json({ message: `Updated ${result.modifiedCount} messages with new chat name`, chatSessionId: chatSessionId, newChatName: newChatName });
         } catch (error) {
@@ -229,7 +229,7 @@ connectToDatabase().then((connectedClient) => {
     app.delete('/chat/:chatSessionId', async (req, res) => {
         const { chatSessionId } = req.params;
         try {
-            const chatsCollection = connectedClient.db('fitness_app').collection("chats");
+            const chatsCollection = connectedClient.db('fitness_planner_app').collection("chats");
 
             // Check if any messages exist for the given chatSessionId
             const messageCount = await chatsCollection.countDocuments({ chatSessionId });
@@ -246,71 +246,65 @@ connectToDatabase().then((connectedClient) => {
         }
     });
 
-
-app.post('/fitness', async (req, res) => {
-    const { userId, title, fitness_entry } = req.body;
-    const datetime = new Date();
-    try {
-        const fitnessCollection = connectedClient.db('fitness_app').collection("fitness");
-        const result = await fitnessCollection.insertOne({ userId, title, datetime:datetime, fitness_entry });
-        res.status(201).json({ message: 'Journal entry created', entryId: result.insertedId });
-    } catch (error) {
-        console.error("Error creating fitness entry:", error);
-        res.status(500).json({ message: 'Error creating fitness entry' });
-    }
-});
-
-
-app.put('/fitness/:entryId', async (req, res) => {
-    const { entryId } = req.params;
-    const datetime = new Date();
-    const { userId, title, fitness_entry } = req.body;
-    try {
-        const fitnessCollection = connectedClient.db('fitness_app').collection("fitness");
-        const result = await fitnessCollection.updateOne({ _id: new ObjectId(entryId) }, { $set: { userId, title, fitness_entry, datetime: datetime } });
-        if (result.matchedCount === 0) {
-            return res.status(404).json({ message: 'Journal entry not found' });
+    app.post('/fitness', async (req, res) => {
+        const { userId, title, fitness_entry } = req.body;
+        const datetime = new Date();
+        try {
+            const fitnessesCollections = connectedClient.db('fitness_planner_app').collection("fitnesses");
+            const result = await fitnessesCollections.insertOne({ userId, title, fitness_entry, datetime });
+            res.status(201).json({ message: 'Fitness entry created', entryId: result.insertedId });
+        } catch (error) {
+            console.error("Error creating fitness entry:", error);
+            res.status(500).json({ message: 'Error creating fitness entry. '+error });
         }
-        res.status(200).json({ message: 'Journal entry updated', entryId: entryId });
-    } catch (error) {
-        console.error("Error updating fitness entry:", error);
-        res.status(500).json({ message: 'Error updating fitness entry' });
-    }
-});
-
-
-
-app.get('/fitness/:userId', async (req, res) => {
-    const { userId } = req.params;
-    try {
-        const fitnessCollection = connectedClient.db('fitness_app').collection("fitness");
-        const fitness = await fitnessCollection.find({ userId }).toArray();
-        res.status(200).json(fitness);
-    } catch (error) {
-        console.error("Error retrieving fitness:", error);
-        res.status(500).json({ message: 'Error retrieving fitness' });
-    }
-});
-
-app.delete('/fitness/:entryId', async (req, res) => {
-    const { entryId } = req.params;
-    try {
-        const fitnessCollection = connectedClient.db('fitness_app').collection("fitness");
-        const result = await fitnessCollection.deleteOne({ _id: new ObjectId(entryId) });
-        if (result.deletedCount === 0) {
-            return res.status(404).json({ message: 'Journal entry not found' });
+    });
+    
+    
+    app.put('/fitness/:entryId', async (req, res) => {
+        const { entryId } = req.params;
+        const { userId, title, fitness_entry } = req.body;
+        try {
+            const fitnessesCollections = connectedClient.db('fitness_planner_app').collection("fitnesses");
+            const result = await fitnessesCollections.updateOne({ _id: new ObjectId(entryId) }, { $set: { userId, title, fitness_entry } });
+            if (result.matchedCount === 0) {
+                return res.status(404).json({ message: 'Fitness entry not found' });
+            }
+            res.status(200).json({ message: 'Fitness entry updated', entryId: entryId });
+        } catch (error) {
+            console.error("Error updating fitness entry:", error);
+            res.status(500).json({ message: 'Error updating fitness entry' });
         }
-        res.status(200).json({ message: 'Journal entry deleted', entryId: entryId });
-    } catch (error) {
-        console.error("Error deleting fitness entry:", error);
-        res.status(500).json({ message: 'Error deleting fitness entry' });
-    }
+    });
+    
+    
+    
+    app.get('/fitnesses/:userId', async (req, res) => {
+        const { userId } = req.params;
+        try {
+            const fitnessesCollections = connectedClient.db('fitness_planner_app').collection("fitnesses");
+            const fitnesses = await fitnessesCollections.find({ userId }).toArray();
+            res.status(200).json(fitnesses);
+        } catch (error) {
+            console.error("Error retrieving fitnesses:", error);
+            res.status(500).json({ message: 'Error retrieving fitnesses' });
+        }
+    });
+    
+    app.delete('/fitness/:entryId', async (req, res) => {
+        const { entryId } = req.params;
+        try {
+            const fitnessesCollections = connectedClient.db('fitness_planner_app').collection("fitnesses");
+            const result = await fitnessesCollections.deleteOne({ _id: new ObjectId(entryId) });
+            if (result.deletedCount === 0) {
+                return res.status(404).json({ message: 'fitness entry not found' });
+            }
+            res.status(200).json({ message: 'fitness entry deleted', entryId: entryId });
+        } catch (error) {
+            console.error("Error deleting fitness entry:", error);
+            res.status(500).json({ message: 'Error deleting fitness entry', error: error });
+        }
+    });
 });
-
-});
-
-
-
 
 app.get('/', (req, res) => {
     const name = process.env.NAME || 'World';
